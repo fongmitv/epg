@@ -1,0 +1,59 @@
+name: Update IPTV and EPG
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Run daily at midnight UTC
+  workflow_dispatch:    # Allow manual triggering
+
+jobs:
+  update_sources:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Get Current Timestamp
+        id: date
+        run: echo "::set-output name=date::$(date -u -d '+8 hour' '+%Y.%m.%d %H:%M:%S')"
+
+      - name: Download Program Guide
+        run: |
+          wget -O ./My.xml https://cutt.ly/FreeviewMY-EPG-1 || true
+          wget -O ./Astro2.xml https://cutt.ly/FreeviewMY-EPG-2 || true
+          wget -O ./Astro.xml https://raw.githubusercontent.com/azimabid00/epg/main/astro_epg.xml || true
+          wget -O ./unifi.xml https://raw.githubusercontent.com/azimabid00/epg/main/unifi_epg.xml || true
+          wget -O ./SG.xml https://raw.githubusercontent.com/dbghelp/mewatch-EPG/refs/heads/main/mewatch.xml || true
+          wget 'https://assets.livednow.com/epg.xml' \
+          --header='Upgrade-Insecure-Requests: 1' \
+          --header='User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36' \
+          --header='sec-ch-ua: "Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"' \
+          --header='sec-ch-ua-mobile: ?0' \
+          --header='sec-ch-ua-platform: "Windows"' \
+          -O ./CHN.xml || true
+          echo "EPG Auto Update in ${{ steps.date.outputs.date }}" > README.md
+
+      - name: Setup Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install Dependencies
+        run: pip install lxml
+
+      - name: Run Python Scripts
+        run: |
+          
+          python ./.github/workflows/sanitized.py
+          python ./.github/workflows/epg.py
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add Astro.xml	Astro2.xml	CHN.xml	EPG.xml	My.xml	README.md	SG.xml	unifi.xml
+          git commit -m "${{ steps.date.outputs.date }}" || echo "No changes to commit"
+          git branch -M main
+          git remote set-url origin https://github.com/fongmitv/epg.git
+          git push -u origin main
+
